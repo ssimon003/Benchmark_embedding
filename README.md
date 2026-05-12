@@ -28,7 +28,29 @@ The first approach is stronger. It checks whether the model solves the kind of t
 |---|---|---|
 | `bench.py` | Exploratory UMAP + HDBSCAN clustering on one survey column | Weak as a model benchmark |
 | `survey_embedding_benchmark.py` | Domain benchmark on the survey CSV using survey-question topics as labels | Stronger for this project |
+| `survey_reranker_benchmark.py` | Domain benchmark for reranker models using topic-prompt, answer-to-answer, and cross-language ranking tasks | Stronger for choosing rerankers |
 | `mteb_dutch_english_benchmark.py` | Public Dutch/Dutch-English MTEB benchmark | Stronger external sanity check |
+
+## Reranker Benchmark
+
+Use `survey_reranker_benchmark.py` when you want to compare reranker models such
+as `Qwen/Qwen3-Reranker-4B` and `BAAI/bge-reranker-v2-m3`.
+
+Default run:
+
+```bash
+.venv/bin/python survey_reranker_benchmark.py --device mps
+```
+
+Quick smoke test:
+
+```bash
+.venv/bin/python survey_reranker_benchmark.py --quick --device mps
+```
+
+The benchmark writes `domain_reranker_benchmark_log.jsonl` and
+`reranker_benchmark_results/latest_summary_ranking.csv`. See
+`RERANKER_BENCHMARK_EXPLAINED.md` for the score explanation.
 
 ## Why `bench.py` Is Weaker
 
