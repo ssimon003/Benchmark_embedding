@@ -1,0 +1,12 @@
+pandas>=2.2
+numpy>=1.26
+scikit-learn>=1.4
+umap-learn>=0.5.6
+hdbscan>=0.8.33
+sentence-transformers>=3.0
+torch>=2.2
+transformers>=4.41
+accelerate>=0.30
+sentencepiece>=0.2
+ollama>=0.3
+tqdm>=4.66

@@ -1,0 +1,8 @@
+/.hf-datasets-cache
+/.mteb-cache
+/.uv-cache
+/.uv-python
+/.venv
+/benchmark_log.jsonl
+/domain_embedding_benchmark_gpu_log.jsonl
+/domain_embedding_benchmark_log.jsonl
