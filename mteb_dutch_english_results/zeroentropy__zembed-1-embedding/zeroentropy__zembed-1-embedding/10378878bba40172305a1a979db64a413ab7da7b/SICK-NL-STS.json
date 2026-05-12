@@ -1,0 +1,27 @@
+{
+  "dataset_revision": "7f88f003fc4e37ed8cd9ade84e390d871b032fef",
+  "task_name": "SICK-NL-STS",
+  "mteb_version": "2.12.30",
+  "scores": {
+    "test": [
+      {
+        "pearson": 0.502091,
+        "spearman": 0.515063,
+        "cosine_pearson": 0.502091,
+        "cosine_spearman": 0.515063,
+        "manhattan_pearson": 0.477631,
+        "manhattan_spearman": 0.514737,
+        "euclidean_pearson": 0.477878,
+        "euclidean_spearman": 0.515079,
+        "main_score": 0.515063,
+        "hf_subset": "default",
+        "languages": [
+          "nld-Latn"
+        ]
+      }
+    ]
+  },
+  "evaluation_time": 116.32560205459595,
+  "kg_co2_emissions": null,
+  "date": null
+}

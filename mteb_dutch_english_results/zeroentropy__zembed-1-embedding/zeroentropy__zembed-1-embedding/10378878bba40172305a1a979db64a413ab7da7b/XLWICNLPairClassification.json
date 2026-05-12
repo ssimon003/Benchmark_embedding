@@ -1,0 +1,49 @@
+{
+  "dataset_revision": "0b33ce358b1b5d500ff3715ba3d777b4d2c21cb0",
+  "task_name": "XLWICNLPairClassification",
+  "mteb_version": "2.12.30",
+  "scores": {
+    "test": [
+      {
+        "similarity_accuracy": 0.661355,
+        "similarity_f1": 0.678967,
+        "similarity_precision": 0.539273,
+        "similarity_recall": 0.916335,
+        "similarity_ap": 0.715751,
+        "cosine_accuracy": 0.661355,
+        "cosine_f1": 0.678967,
+        "cosine_precision": 0.539273,
+        "cosine_recall": 0.916335,
+        "cosine_ap": 0.715751,
+        "manhattan_accuracy": 0.646414,
+        "manhattan_f1": 0.673716,
+        "manhattan_precision": 0.542579,
+        "manhattan_recall": 0.888446,
+        "manhattan_ap": 0.704916,
+        "euclidean_accuracy": 0.661355,
+        "euclidean_f1": 0.680473,
+        "euclidean_precision": 0.541176,
+        "euclidean_recall": 0.916335,
+        "euclidean_ap": 0.716105,
+        "dot_accuracy": 0.661355,
+        "dot_f1": 0.678832,
+        "dot_precision": 0.535714,
+        "dot_recall": 0.926295,
+        "dot_ap": 0.714952,
+        "max_accuracy": 0.661355,
+        "max_f1": 0.680473,
+        "max_precision": 0.542579,
+        "max_recall": 0.926295,
+        "max_ap": 0.716105,
+        "main_score": 0.716105,
+        "hf_subset": "default",
+        "languages": [
+          "nld-Latn"
+        ]
+      }
+    ]
+  },
+  "evaluation_time": 26.39822793006897,
+  "kg_co2_emissions": null,
+  "date": null
+}

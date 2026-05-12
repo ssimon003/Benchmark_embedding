@@ -1,0 +1,24 @@
+{
+  "dataset_revision": "a1bc0e8fd36c3d5015bd64c14ca098596774784a",
+  "task_name": "WebFAQBitextMiningQuestions",
+  "mteb_version": "2.12.30",
+  "scores": {
+    "default": [
+      {
+        "precision": 0.885555,
+        "recall": 0.918273,
+        "f1": 0.895857,
+        "accuracy": 0.918273,
+        "main_score": 0.895857,
+        "hf_subset": "eng-nld",
+        "languages": [
+          "eng-Latn",
+          "nld-Latn"
+        ]
+      }
+    ]
+  },
+  "evaluation_time": 387.189453125,
+  "kg_co2_emissions": null,
+  "date": null
+}

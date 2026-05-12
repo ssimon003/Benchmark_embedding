@@ -16,7 +16,8 @@ Optional MTEB run, after installing mteb:
 Why this is different from bench.py:
 - It uses the original normalized embedding space, not UMAP output.
 - It uses known survey-question columns as labels.
-- It includes Dutch/English cross-language retrieval checks.
+- It includes Dutch/English cross-language retrieval checks using the CSV's
+  detected language distribution as-is.
 - Silhouette is only a weak diagnostic, not the main score.
 """
 
@@ -56,8 +57,12 @@ CSV_SEP = ";"
 LOG_PATH = Path("domain_embedding_benchmark_log.jsonl")
 
 DEFAULT_MODELS = [
-    "zeroentropy/zembed-1-embedding",
-    "BAAI/bge-m3",
+ #   "zeroentropy/zembed-1-embedding",
+ #   "BAAI/bge-m3",
+ #   "Octen/Octen-Embedding-8B",
+ #   "Qwen/Qwen3-Embedding-8B",
+   # "jinaai/jina-embeddings-v5-text-small",
+    "ibm-granite/granite-embedding-311m-multilingual-r2",
 ]
 
 
@@ -202,16 +207,10 @@ def parse_args() -> argparse.Namespace:
         help="Device for embedding. Use auto to prefer Apple MPS, then CUDA, then CPU.",
     )
     parser.add_argument(
-        "--dutch-weight",
-        type=float,
-        default=0.70,
-        help="Business weight for Dutch-heavy mixed-language usage. English gets 1 - this value.",
-    )
-    parser.add_argument(
         "--max-rows-per-topic",
         type=int,
         default=None,
-        help="Optional quick-test limit per survey topic.",
+        help="Optional quick-test limit per survey topic. By default the full CSV is used.",
     )
     parser.add_argument("--log-path", type=Path, default=LOG_PATH)
     parser.add_argument("--skip-linear-probe", action="store_true")
@@ -426,31 +425,10 @@ def add_prefix(prefix: str, metrics: dict[str, float | int]) -> dict[str, float 
     return {f"{prefix}_{key}": value for key, value in metrics.items()}
 
 
-def weighted_language_value(
-    metrics: dict[str, float | int],
-    nl_key: str,
-    en_key: str,
-    dutch_weight: float,
-) -> float:
-    english_weight = 1.0 - dutch_weight
-    nl_value = metrics.get(nl_key)
-    en_value = metrics.get(en_key)
-    total = 0.0
-    weight = 0.0
-    if isinstance(nl_value, (int, float)) and not math.isnan(float(nl_value)):
-        total += float(nl_value) * dutch_weight
-        weight += dutch_weight
-    if isinstance(en_value, (int, float)) and not math.isnan(float(en_value)):
-        total += float(en_value) * english_weight
-        weight += english_weight
-    return total / weight if weight else math.nan
-
-
 def language_retrieval_metrics(
     similarities: np.ndarray,
     labels: np.ndarray,
     languages: np.ndarray,
-    dutch_weight: float,
     k: int = 10,
 ) -> dict[str, float | int]:
     all_indices = np.arange(len(labels))
@@ -507,31 +485,6 @@ def language_retrieval_metrics(
         )
         out.update(add_prefix(f"mixed_pool_{source}_query", mixed_pool))
 
-    out["cross_lang_map_at_10_70_30"] = weighted_language_value(
-        out,
-        "cross_lang_nl_to_en_map_at_10",
-        "cross_lang_en_to_nl_map_at_10",
-        dutch_weight,
-    )
-    out["cross_lang_top1_topic_acc_70_30"] = weighted_language_value(
-        out,
-        "cross_lang_nl_to_en_top1_topic_acc",
-        "cross_lang_en_to_nl_top1_topic_acc",
-        dutch_weight,
-    )
-    out["mixed_pool_map_at_10_70_30"] = weighted_language_value(
-        out,
-        "mixed_pool_nl_query_map_at_10",
-        "mixed_pool_en_query_map_at_10",
-        dutch_weight,
-    )
-    out["mixed_pool_top1_topic_acc_70_30"] = weighted_language_value(
-        out,
-        "mixed_pool_nl_query_top1_topic_acc",
-        "mixed_pool_en_query_top1_topic_acc",
-        dutch_weight,
-    )
-
     return out
 
 
@@ -541,7 +494,6 @@ def topic_query_metrics(
     labels: np.ndarray,
     languages: np.ndarray,
     batch_size: int,
-    dutch_weight: float,
 ) -> dict[str, float]:
     topic_keys = np.array([topic.key for topic in TOPICS])
     nl_queries = [topic.nl_query for topic in TOPICS]
@@ -584,24 +536,6 @@ def topic_query_metrics(
         metrics[f"query_acc_english_prompt_on_{lang}_answers"] = float(accuracy_score(labels[mask], en_pred[mask]))
         metrics[f"query_acc_mixed_prompt_on_{lang}_answers"] = float(accuracy_score(labels[mask], mixed_pred[mask]))
 
-    metrics["query_acc_same_language_prompt_70_30"] = weighted_language_value(
-        metrics,
-        "query_acc_dutch_prompt_on_nl_answers",
-        "query_acc_english_prompt_on_en_answers",
-        dutch_weight,
-    )
-    metrics["query_acc_cross_language_prompt_70_30"] = weighted_language_value(
-        metrics,
-        "query_acc_english_prompt_on_nl_answers",
-        "query_acc_dutch_prompt_on_en_answers",
-        dutch_weight,
-    )
-    metrics["query_acc_mixed_prompt_70_30"] = weighted_language_value(
-        metrics,
-        "query_acc_mixed_prompt_on_nl_answers",
-        "query_acc_mixed_prompt_on_en_answers",
-        dutch_weight,
-    )
     return metrics
 
 
@@ -672,25 +606,6 @@ def weighted_domain_score(metrics: dict[str, float | int | str]) -> float:
     return total / used_weight if used_weight else math.nan
 
 
-def dutch_heavy_cross_language_score(metrics: dict[str, float | int | str]) -> float:
-    weights = {
-        "cross_lang_map_at_10_70_30": 0.35,
-        "mixed_pool_map_at_10_70_30": 0.25,
-        "query_acc_cross_language_prompt_70_30": 0.20,
-        "query_acc_same_language_prompt_70_30": 0.10,
-        "map_at_10": 0.05,
-        "linear_probe_f1_macro": 0.05,
-    }
-    total = 0.0
-    used_weight = 0.0
-    for key, weight in weights.items():
-        value = metrics.get(key)
-        if isinstance(value, (int, float)) and not math.isnan(float(value)):
-            total += float(value) * weight
-            used_weight += weight
-    return total / used_weight if used_weight else math.nan
-
-
 def run_domain_benchmark(args: argparse.Namespace) -> list[dict[str, float | int | str]]:
     device = resolve_device(args.device)
     print_device_info(device)
@@ -723,8 +638,6 @@ def run_domain_benchmark(args: argparse.Namespace) -> list[dict[str, float | int
             "device": device,
             "n_responses": int(len(data)),
             "n_topics": int(len(TOPICS)),
-            "dutch_weight": round(float(args.dutch_weight), 3),
-            "english_weight": round(float(1.0 - args.dutch_weight), 3),
             "nl_pct_detected": round(float(np.mean(languages == "nl") * 100), 2),
             "en_pct_detected": round(float(np.mean(languages == "en") * 100), 2),
             "unknown_lang_pct_detected": round(float(np.mean(languages == "unknown") * 100), 2),
@@ -736,8 +649,8 @@ def run_domain_benchmark(args: argparse.Namespace) -> list[dict[str, float | int
         np.fill_diagonal(similarities, -np.inf)
 
         metrics.update(label_retrieval_metrics(similarities, labels, k=10))
-        metrics.update(language_retrieval_metrics(similarities, labels, languages, args.dutch_weight, k=10))
-        metrics.update(topic_query_metrics(model, embeddings, labels, languages, args.batch_size, args.dutch_weight))
+        metrics.update(language_retrieval_metrics(similarities, labels, languages, k=10))
+        metrics.update(topic_query_metrics(model, embeddings, labels, languages, args.batch_size))
 
         if not args.skip_linear_probe:
             metrics.update(linear_probe_metrics(embeddings, labels))
@@ -746,7 +659,6 @@ def run_domain_benchmark(args: argparse.Namespace) -> list[dict[str, float | int
 
         metrics["silhouette_true_topics_cosine"] = sampled_silhouette(embeddings, labels)
         metrics["domain_score"] = weighted_domain_score(metrics)
-        metrics["dutch_heavy_cross_language_score"] = dutch_heavy_cross_language_score(metrics)
 
         args.log_path.parent.mkdir(parents=True, exist_ok=True)
         with args.log_path.open("a", encoding="utf-8") as f:
@@ -762,15 +674,10 @@ def run_domain_benchmark(args: argparse.Namespace) -> list[dict[str, float | int
 def print_model_summary(metrics: dict[str, float | int | str], log_path: Path) -> None:
     important = [
         "domain_score",
-        "dutch_heavy_cross_language_score",
-        "cross_lang_map_at_10_70_30",
         "cross_lang_nl_to_en_map_at_10",
         "cross_lang_en_to_nl_map_at_10",
-        "mixed_pool_map_at_10_70_30",
         "mixed_pool_nl_query_map_at_10",
         "mixed_pool_en_query_map_at_10",
-        "query_acc_cross_language_prompt_70_30",
-        "query_acc_same_language_prompt_70_30",
         "map_at_10",
         "top1_topic_acc",
         "query_acc_mixed",
@@ -795,16 +702,16 @@ def print_model_summary(metrics: dict[str, float | int | str], log_path: Path) -
 def print_ranking(results: list[dict[str, float | int | str]]) -> None:
     if not results:
         return
-    ranked = sorted(results, key=lambda row: float(row["dutch_heavy_cross_language_score"]), reverse=True)
+    ranked = sorted(results, key=lambda row: float(row["domain_score"]), reverse=True)
     print("\n" + "=" * 78)
-    print("Ranking by dutch_heavy_cross_language_score")
+    print("Ranking by domain_score")
     print("=" * 78)
     for i, row in enumerate(ranked, start=1):
         print(
             f"{i}. {row['model']}  "
-            f"dutch_heavy_score={float(row['dutch_heavy_cross_language_score']):.4f}  "
-            f"cross_70_30={float(row['cross_lang_map_at_10_70_30']):.4f}  "
-            f"mixed_pool_70_30={float(row['mixed_pool_map_at_10_70_30']):.4f}"
+            f"domain_score={float(row['domain_score']):.4f}  "
+            f"cross_lang_map={float(row['cross_lang_map_at_10']):.4f}  "
+            f"mixed_query_acc={float(row['query_acc_mixed']):.4f}"
         )
 
 
