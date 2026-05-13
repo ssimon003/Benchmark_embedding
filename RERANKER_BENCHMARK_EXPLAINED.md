@@ -192,17 +192,22 @@ Quick smoke test:
 The default models are:
 
 ```text
-Qwen/Qwen3-Reranker-4B
+Qwen/Qwen3-Reranker-8B
 BAAI/bge-reranker-v2-m3
+zeroentropy/zerank-2-reranker
+jinaai/jina-reranker-v3
 ```
 
-For Qwen 4B, start with a small batch size if memory is limited:
+All models run without an extra instruction prompt so the comparison is strict
+apples-to-apples.
+
+For Qwen 8B, start with a small batch size if memory is limited:
 
 ```bash
 .venv/bin/python survey_reranker_benchmark.py \
   --device mps \
   --batch-size 1 \
-  --models Qwen/Qwen3-Reranker-4B BAAI/bge-reranker-v2-m3
+  --models Qwen/Qwen3-Reranker-8B
 ```
 
 BGE is smaller, so it can usually use a larger batch size:
@@ -255,6 +260,33 @@ High topic_prompt_ndcg_at_10
 High quality but very low pairs_per_second
 = possibly useful, but expensive for production
 ```
+
+## Benchmark Results
+
+The current full benchmark was run on Apple MPS with seed `42`, no instruction
+prompt for any model, `266` ranking cases, and `11,956` scored query-candidate
+pairs per model.
+
+| Rank | Model | `reranker_score` | Answer NDCG@10 | Answer MAP@10 | Cross-language NDCG@10 | Topic-prompt NDCG@10 | Pairs/sec |
+|---:|---|---:|---:|---:|---:|---:|---:|
+| 1 | `zeroentropy/zerank-2-reranker` | 0.4166 | 0.4616 | 0.3096 | 0.4378 | 0.4637 | 32.22 |
+| 2 | `Qwen/Qwen3-Reranker-8B` | 0.3980 | 0.4405 | 0.2857 | 0.4104 | 0.4968 | 11.88 |
+| 3 | `BAAI/bge-reranker-v2-m3` | 0.3977 | 0.4546 | 0.2979 | 0.4184 | 0.3877 | 159.04 |
+| 4 | `jinaai/jina-reranker-v3` | 0.3851 | 0.4444 | 0.2935 | 0.4069 | 0.3803 | 72.36 |
+
+The winner is `zeroentropy/zerank-2-reranker`. It has the highest overall
+`reranker_score` and leads the most important quality metrics for this use
+case: answer-to-answer `NDCG@10`, answer-to-answer `MAP@10`, and cross-language
+`NDCG@10`. That means it was best at ranking similar survey answers near the
+top and was also strongest at matching Dutch and English answers about the same
+topic.
+
+`Qwen/Qwen3-Reranker-8B` was the strongest model for predefined topic-prompt
+search, with the best topic-prompt `NDCG@10`, but it was much slower and did
+not beat Zerank on the weighted score. `BAAI/bge-reranker-v2-m3` was almost
+tied with Qwen on quality and was by far the fastest model, so it is the best
+speed-quality compromise. `jinaai/jina-reranker-v3` ran successfully with its
+native reranking interface, but it finished last on this specific benchmark.
 
 ## Limitations
 

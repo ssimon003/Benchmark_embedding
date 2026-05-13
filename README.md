@@ -34,7 +34,8 @@ The first approach is stronger. It checks whether the model solves the kind of t
 ## Reranker Benchmark
 
 Use `survey_reranker_benchmark.py` when you want to compare reranker models such
-as `Qwen/Qwen3-Reranker-4B` and `BAAI/bge-reranker-v2-m3`.
+as `Qwen/Qwen3-Reranker-8B`, `BAAI/bge-reranker-v2-m3`,
+`zeroentropy/zerank-2-reranker`, and `jinaai/jina-reranker-v3`.
 
 Default run:
 

@@ -17,7 +17,7 @@ Quick smoke test:
 Add models later:
 
     .venv/bin/python survey_reranker_benchmark.py \
-      --models Qwen/Qwen3-Reranker-4B BAAI/bge-reranker-v2-m3 another/model
+      --models Qwen/Qwen3-Reranker-8B BAAI/bge-reranker-v2-m3 another/model
 """
 
 from __future__ import annotations
@@ -30,11 +30,13 @@ import time
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import torch
 from sentence_transformers import CrossEncoder
+from transformers import AutoModel
 from tqdm.auto import tqdm
 
 from survey_embedding_benchmark import (
@@ -48,17 +50,15 @@ from survey_embedding_benchmark import (
 
 
 DEFAULT_MODELS = [
-    "Qwen/Qwen3-Reranker-4B",
-    "BAAI/bge-reranker-v2-m3",
+   # "Qwen/Qwen3-Reranker-8B",
+  #  "BAAI/bge-reranker-v2-m3",
+   # "zeroentropy/zerank-2-reranker",
+    "jinaai/jina-reranker-v3",
 ]
 
 LOG_PATH = Path("domain_reranker_benchmark_log.jsonl")
 OUTPUT_DIR = Path("reranker_benchmark_results")
 
-DEFAULT_QWEN_PROMPT = (
-    "Given a student survey analysis query, retrieve survey answers that match "
-    "the same feedback topic."
-)
 
 
 @dataclass(frozen=True)
@@ -89,7 +89,7 @@ def parse_args() -> argparse.Namespace:
         "--batch-size",
         type=int,
         default=4,
-        help="CrossEncoder scoring batch size. Qwen 4B may need 1-4; BGE can usually use more.",
+        help="CrossEncoder scoring batch size. Large rerankers may need 1-4; smaller models can often use more.",
     )
     parser.add_argument("--max-length", type=int, default=512)
     parser.add_argument("--seed", type=int, default=42)
@@ -123,16 +123,6 @@ def parse_args() -> argparse.Namespace:
         default=40,
         help="Candidates sampled from each topic for topic-prompt reranking.",
     )
-    parser.add_argument(
-        "--prompt-mode",
-        choices=["auto", "none", "all"],
-        default="auto",
-        help=(
-            "Instruction prompt handling. auto applies the survey prompt to Qwen3 "
-            "rerankers only; all applies it to every model; none disables it."
-        ),
-    )
-    parser.add_argument("--prompt", default=DEFAULT_QWEN_PROMPT)
     parser.add_argument(
         "--save-query-details",
         action=argparse.BooleanOptionalAction,
@@ -446,14 +436,27 @@ def weighted_reranker_score(metrics: dict[str, float | int | str]) -> float:
     return total / used if used else math.nan
 
 
-def prompt_for_model(model_name: str, args: argparse.Namespace) -> str | None:
-    if args.prompt_mode == "none":
-        return None
-    if args.prompt_mode == "all":
-        return args.prompt
-    if "qwen3-reranker" in model_name.lower():
-        return args.prompt
-    return None
+def uses_native_jina_reranker(model_name: str) -> bool:
+    return model_name == "jinaai/jina-reranker-v3"
+
+
+def load_native_jina_reranker(model_name: str, device: str, args: argparse.Namespace) -> Any:
+    model = AutoModel.from_pretrained(
+        model_name,
+        dtype="auto",
+        trust_remote_code=True,
+        local_files_only=args.local_files_only,
+    )
+    model.eval()
+    if device != "cpu":
+        model.to(device)
+    return model
+
+
+def load_reranker(model_name: str, device: str, args: argparse.Namespace) -> Any:
+    if uses_native_jina_reranker(model_name):
+        return load_native_jina_reranker(model_name, device, args)
+    return load_cross_encoder(model_name, device, args)
 
 
 def load_cross_encoder(model_name: str, device: str, args: argparse.Namespace) -> CrossEncoder:
@@ -466,36 +469,63 @@ def load_cross_encoder(model_name: str, device: str, args: argparse.Namespace) -
     )
 
 
-def score_cases(
+def score_with_native_jina(
+    model: Any,
+    case: RankingCase,
+    texts: np.ndarray,
+) -> np.ndarray:
+    documents = [str(texts[index]) for index in case.candidate_indices]
+    results = model.rerank(case.query_text, documents)
+    scores = np.full(len(documents), -np.inf, dtype=np.float32)
+    for result in results:
+        scores[int(result["index"])] = float(result["relevance_score"])
+    if np.any(np.isneginf(scores)):
+        raise RuntimeError("Native Jina reranker did not return a score for every candidate.")
+    return scores
+
+
+def score_with_cross_encoder(
     model: CrossEncoder,
+    case: RankingCase,
+    texts: np.ndarray,
+    args: argparse.Namespace,
+) -> np.ndarray:
+    pairs = [(case.query_text, str(texts[index])) for index in case.candidate_indices]
+    raw_scores = model.predict(
+        pairs,
+        batch_size=args.batch_size,
+        show_progress_bar=False,
+        prompt=None,
+        convert_to_numpy=True,
+    )
+    scores = np.asarray(raw_scores, dtype=np.float32)
+    if scores.ndim > 1:
+        scores = scores[:, -1]
+    return scores
+
+
+def score_cases(
+    model: Any,
     model_name: str,
     cases: list[RankingCase],
     texts: np.ndarray,
     args: argparse.Namespace,
 ) -> tuple[list[dict[str, float | int | str]], float]:
-    prompt = prompt_for_model(model_name, args)
     per_query_rows = []
     pair_count = sum(len(case.candidate_indices) for case in cases)
 
     with tqdm(total=pair_count, desc=f"Scoring {safe_name(model_name)}", unit="pair") as progress:
         for case in cases:
-            pairs = [(case.query_text, str(texts[index])) for index in case.candidate_indices]
             start = time.time()
-            raw_scores = model.predict(
-                pairs,
-                batch_size=args.batch_size,
-                show_progress_bar=False,
-                prompt=prompt,
-                convert_to_numpy=True,
-            )
+            if uses_native_jina_reranker(model_name):
+                scores = score_with_native_jina(model, case, texts)
+            else:
+                scores = score_with_cross_encoder(model, case, texts, args)
             elapsed = time.time() - start
-            scores = np.asarray(raw_scores, dtype=np.float32)
-            if scores.ndim > 1:
-                scores = scores[:, -1]
             row = case_metrics(case, scores)
             row["score_time_s"] = elapsed
             per_query_rows.append(row)
-            progress.update(len(pairs))
+            progress.update(len(case.candidate_indices))
 
     return per_query_rows, float(sum(float(row["score_time_s"]) for row in per_query_rows))
 
@@ -518,8 +548,8 @@ def summarize_model(
     metrics: dict[str, float | int | str] = {
         "model": model_name,
         "device": device,
-        "prompt_mode": args.prompt_mode,
-        "prompt_used": prompt_for_model(model_name, args) or "",
+        "prompt_mode": "none",
+        "prompt_used": "",
         "seed": args.seed,
         "n_responses": int(len(data)),
         "n_topics": int(len(TOPICS)),
@@ -653,15 +683,11 @@ def main() -> None:
         print("\n" + "=" * 78)
         print(f"Benchmarking {model_name}")
         print("=" * 78)
-        prompt = prompt_for_model(model_name, args)
-        if prompt:
-            print(f"Using instruction prompt: {prompt}")
-        else:
-            print("Using model without an extra instruction prompt.")
+        print("Using model without an extra instruction prompt.")
 
         model = None
         try:
-            model = load_cross_encoder(model_name, device, args)
+            model = load_reranker(model_name, device, args)
             per_query_rows, score_time_s = score_cases(model, model_name, cases, texts, args)
             metrics = summarize_model(model_name, device, data, cases, per_query_rows, score_time_s, args)
             write_outputs(model_name, metrics, per_query_rows, args)
