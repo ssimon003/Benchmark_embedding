@@ -55,14 +55,16 @@ from sklearn.model_selection import train_test_split
 CSV_PATH = Path("DummyData_Final 1.csv")
 CSV_SEP = ";"
 LOG_PATH = Path("domain_embedding_benchmark_log.jsonl")
+RETRIEVAL_KS = (10, 200)
 
 DEFAULT_MODELS = [
  #   "zeroentropy/zembed-1-embedding",
  #   "BAAI/bge-m3",
- #   "Octen/Octen-Embedding-8B",
- #   "Qwen/Qwen3-Embedding-8B",
+    "Octen/Octen-Embedding-8B",
+    "Octen/Octen-Embedding-4B",
+    "Octen/Octen-Embedding-0.6B", #   "Qwen/Qwen3-Embedding-8B",
    # "jinaai/jina-embeddings-v5-text-small",
-    "ibm-granite/granite-embedding-311m-multilingual-r2",
+   # "ibm-granite/granite-embedding-311m-multilingual-r2",
 ]
 
 
@@ -367,11 +369,13 @@ def ranking_metrics_from_candidates(
     labels: np.ndarray,
     query_indices: np.ndarray,
     candidates_for_query,
-    k: int = 10,
+    ks: tuple[int, ...] = RETRIEVAL_KS,
 ) -> dict[str, float | int]:
-    ap_values = []
-    ndcg_values = []
-    reciprocal_ranks = []
+    ks = tuple(sorted(set(ks)))
+    max_k = max(ks)
+    ap_values = {k: [] for k in ks}
+    ndcg_values = {k: [] for k in ks}
+    reciprocal_ranks = {k: [] for k in ks}
     top1_values = []
 
     for i in query_indices:
@@ -386,37 +390,47 @@ def ranking_metrics_from_candidates(
             continue
 
         scores = similarities[i, candidate_indices]
-        limit = min(k, len(candidate_indices))
+        limit = min(max_k, len(candidate_indices))
         order = np.argpartition(-scores, kth=limit - 1)[:limit]
         order = order[np.argsort(-scores[order])]
         relevance = relevance_all[order]
 
         top1_values.append(float(relevance[0]))
-        ap_values.append(average_precision_at_k(relevance, total_relevant, k))
-        ndcg_values.append(ndcg_at_k(relevance, total_relevant, k))
-
         relevant_positions = np.flatnonzero(relevance)
-        if len(relevant_positions):
-            reciprocal_ranks.append(1.0 / float(relevant_positions[0] + 1))
-        else:
-            reciprocal_ranks.append(0.0)
 
-    return {
-        "queries": int(len(ap_values)),
+        for k in ks:
+            ap_values[k].append(average_precision_at_k(relevance, total_relevant, k))
+            ndcg_values[k].append(ndcg_at_k(relevance, total_relevant, k))
+            in_cutoff = relevant_positions[relevant_positions < k]
+            if len(in_cutoff):
+                reciprocal_ranks[k].append(1.0 / float(in_cutoff[0] + 1))
+            else:
+                reciprocal_ranks[k].append(0.0)
+
+    metrics: dict[str, float | int] = {
+        "queries": int(len(top1_values)),
         "top1_topic_acc": float(np.nanmean(top1_values)) if top1_values else math.nan,
-        "map_at_10": float(np.nanmean(ap_values)),
-        "ndcg_at_10": float(np.nanmean(ndcg_values)),
-        "mrr_at_10": float(np.nanmean(reciprocal_ranks)) if reciprocal_ranks else math.nan,
     }
+    for k in ks:
+        metrics[f"map_at_{k}"] = float(np.nanmean(ap_values[k])) if ap_values[k] else math.nan
+        metrics[f"ndcg_at_{k}"] = float(np.nanmean(ndcg_values[k])) if ndcg_values[k] else math.nan
+        metrics[f"mrr_at_{k}"] = (
+            float(np.nanmean(reciprocal_ranks[k])) if reciprocal_ranks[k] else math.nan
+        )
+    return metrics
 
 
-def label_retrieval_metrics(similarities: np.ndarray, labels: np.ndarray, k: int = 10) -> dict[str, float | int]:
+def label_retrieval_metrics(
+    similarities: np.ndarray,
+    labels: np.ndarray,
+    ks: tuple[int, ...] = RETRIEVAL_KS,
+) -> dict[str, float | int]:
     all_indices = np.arange(len(labels))
 
     def candidates_for_query(i: int) -> np.ndarray:
         return all_indices[all_indices != i]
 
-    metrics = ranking_metrics_from_candidates(similarities, labels, all_indices, candidates_for_query, k)
+    metrics = ranking_metrics_from_candidates(similarities, labels, all_indices, candidates_for_query, ks)
     metrics.pop("queries", None)
     return metrics
 
@@ -429,7 +443,7 @@ def language_retrieval_metrics(
     similarities: np.ndarray,
     labels: np.ndarray,
     languages: np.ndarray,
-    k: int = 10,
+    ks: tuple[int, ...] = RETRIEVAL_KS,
 ) -> dict[str, float | int]:
     all_indices = np.arange(len(labels))
     known = np.isin(languages, ["nl", "en"])
@@ -443,16 +457,17 @@ def language_retrieval_metrics(
         labels,
         known_indices,
         opposite_language_candidates,
-        k,
+        ks,
     )
 
     out: dict[str, float | int] = {
         "cross_lang_queries": aggregate["queries"],
         "cross_lang_top1_topic_acc": aggregate["top1_topic_acc"],
-        "cross_lang_map_at_10": aggregate["map_at_10"],
-        "cross_lang_ndcg_at_10": aggregate["ndcg_at_10"],
-        "cross_lang_mrr_at_10": aggregate["mrr_at_10"],
     }
+    for k in ks:
+        out[f"cross_lang_map_at_{k}"] = aggregate[f"map_at_{k}"]
+        out[f"cross_lang_ndcg_at_{k}"] = aggregate[f"ndcg_at_{k}"]
+        out[f"cross_lang_mrr_at_{k}"] = aggregate[f"mrr_at_{k}"]
 
     for source, target in [("nl", "en"), ("en", "nl")]:
         query_indices = np.flatnonzero(languages == source)
@@ -466,7 +481,7 @@ def language_retrieval_metrics(
             labels,
             query_indices,
             candidates_for_direction,
-            k,
+            ks,
         )
         out.update(add_prefix(f"cross_lang_{source}_to_{target}", directional))
 
@@ -481,7 +496,7 @@ def language_retrieval_metrics(
             labels,
             query_indices,
             mixed_pool_candidates,
-            k,
+            ks,
         )
         out.update(add_prefix(f"mixed_pool_{source}_query", mixed_pool))
 
@@ -588,11 +603,11 @@ def sampled_silhouette(embeddings: np.ndarray, labels: np.ndarray) -> float:
     )
 
 
-def weighted_domain_score(metrics: dict[str, float | int | str]) -> float:
+def weighted_domain_score(metrics: dict[str, float | int | str], retrieval_k: int = 10) -> float:
     weights = {
-        "map_at_10": 0.30,
+        f"map_at_{retrieval_k}": 0.30,
         "query_acc_mixed": 0.25,
-        "cross_lang_map_at_10": 0.20,
+        f"cross_lang_map_at_{retrieval_k}": 0.20,
         "linear_probe_f1_macro": 0.15,
         "kmeans_v_measure": 0.10,
     }
@@ -648,8 +663,8 @@ def run_domain_benchmark(args: argparse.Namespace) -> list[dict[str, float | int
         similarities = embeddings @ embeddings.T
         np.fill_diagonal(similarities, -np.inf)
 
-        metrics.update(label_retrieval_metrics(similarities, labels, k=10))
-        metrics.update(language_retrieval_metrics(similarities, labels, languages, k=10))
+        metrics.update(label_retrieval_metrics(similarities, labels))
+        metrics.update(language_retrieval_metrics(similarities, labels, languages))
         metrics.update(topic_query_metrics(model, embeddings, labels, languages, args.batch_size))
 
         if not args.skip_linear_probe:
@@ -659,6 +674,7 @@ def run_domain_benchmark(args: argparse.Namespace) -> list[dict[str, float | int
 
         metrics["silhouette_true_topics_cosine"] = sampled_silhouette(embeddings, labels)
         metrics["domain_score"] = weighted_domain_score(metrics)
+        metrics["domain_score_200"] = weighted_domain_score(metrics, retrieval_k=200)
 
         args.log_path.parent.mkdir(parents=True, exist_ok=True)
         with args.log_path.open("a", encoding="utf-8") as f:
@@ -674,14 +690,25 @@ def run_domain_benchmark(args: argparse.Namespace) -> list[dict[str, float | int
 def print_model_summary(metrics: dict[str, float | int | str], log_path: Path) -> None:
     important = [
         "domain_score",
+        "domain_score_200",
         "cross_lang_nl_to_en_map_at_10",
+        "cross_lang_nl_to_en_map_at_200",
         "cross_lang_en_to_nl_map_at_10",
+        "cross_lang_en_to_nl_map_at_200",
         "mixed_pool_nl_query_map_at_10",
+        "mixed_pool_nl_query_map_at_200",
         "mixed_pool_en_query_map_at_10",
+        "mixed_pool_en_query_map_at_200",
         "map_at_10",
+        "map_at_200",
+        "ndcg_at_10",
+        "ndcg_at_200",
+        "mrr_at_10",
+        "mrr_at_200",
         "top1_topic_acc",
         "query_acc_mixed",
         "cross_lang_map_at_10",
+        "cross_lang_map_at_200",
         "cross_lang_top1_topic_acc",
         "linear_probe_f1_macro",
         "kmeans_v_measure",
@@ -710,7 +737,9 @@ def print_ranking(results: list[dict[str, float | int | str]]) -> None:
         print(
             f"{i}. {row['model']}  "
             f"domain_score={float(row['domain_score']):.4f}  "
+            f"domain_score_200={float(row['domain_score_200']):.4f}  "
             f"cross_lang_map={float(row['cross_lang_map_at_10']):.4f}  "
+            f"cross_lang_map_200={float(row['cross_lang_map_at_200']):.4f}  "
             f"mixed_query_acc={float(row['query_acc_mixed']):.4f}"
         )
 

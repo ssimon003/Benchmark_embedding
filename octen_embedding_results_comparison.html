@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Octen Embedding Benchmark Comparison</title>
+  <style>
+    :root {
+      --ink: #17201d;
+      --muted: #5f6f68;
+      --line: #d7ded8;
+      --paper: #f8f6ef;
+      --panel: #ffffff;
+      --moss: #567361;
+      --teal: #1d7a7a;
+      --rust: #b85733;
+      --gold: #c79b36;
+      --good: #146b52;
+      --warn: #9b542f;
+      --shadow: 0 22px 70px rgba(37, 48, 43, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(135deg, rgba(86, 115, 97, 0.16), transparent 36%),
+        linear-gradient(315deg, rgba(199, 155, 54, 0.16), transparent 42%),
+        var(--paper);
+      font-family: "Aptos", "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 48px 0 64px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+      gap: 28px;
+      align-items: stretch;
+      margin-bottom: 28px;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      max-width: 880px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(2.4rem, 5vw, 5.4rem);
+      font-weight: 700;
+    }
+
+    h2 {
+      font-size: 1.45rem;
+      margin-bottom: 14px;
+    }
+
+    h3 {
+      font-size: 1rem;
+      margin-bottom: 8px;
+    }
+
+    p {
+      margin: 0;
+    }
+
+    .lead {
+      max-width: 770px;
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 1.12rem;
+    }
+
+    .hero-note,
+    section {
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(215, 222, 216, 0.9);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-note {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 240px;
+      padding: 24px;
+    }
+
+    .winner-label {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .winner-model {
+      margin-top: 8px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 2.1rem;
+      line-height: 1.05;
+    }
+
+    .winner-text {
+      margin-top: 16px;
+      color: var(--muted);
+    }
+
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 22px;
+    }
+
+    .stat {
+      border-top: 3px solid var(--line);
+      padding-top: 10px;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 1.25rem;
+    }
+
+    .stat span {
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    section {
+      margin-top: 18px;
+      padding: 24px;
+    }
+
+    .section-intro {
+      max-width: 850px;
+      color: var(--muted);
+      margin-bottom: 18px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .model-card {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: 18px;
+    }
+
+    .model-card.best {
+      border-color: rgba(29, 122, 122, 0.42);
+      box-shadow: inset 0 0 0 2px rgba(29, 122, 122, 0.12);
+    }
+
+    .model-name {
+      font-weight: 800;
+      font-size: 1.18rem;
+    }
+
+    .model-role {
+      min-height: 44px;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .score-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .score-row:last-child {
+      border-bottom: 0;
+    }
+
+    .score-row span {
+      color: var(--muted);
+    }
+
+    .score-row strong {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .bar-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 170px minmax(180px, 1fr) 74px;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .bar-label {
+      font-weight: 700;
+    }
+
+    .track {
+      height: 14px;
+      overflow: hidden;
+      background: #e8ebe5;
+      border: 1px solid var(--line);
+    }
+
+    .fill {
+      height: 100%;
+      width: var(--w);
+      background: var(--c);
+    }
+
+    .bar-value {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .insight {
+      border-left: 4px solid var(--moss);
+      background: rgba(248, 246, 239, 0.72);
+      padding: 16px 18px;
+    }
+
+    .insight strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    table {
+      width: 100%;
+      min-width: 860px;
+      border-collapse: collapse;
+      font-variant-numeric: tabular-nums;
+    }
+
+    th,
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    th:first-child,
+    td:first-child {
+      text-align: left;
+      font-weight: 800;
+    }
+
+    th {
+      color: var(--muted);
+      background: #f1f2ec;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .best-cell {
+      color: var(--good);
+      font-weight: 900;
+    }
+
+    .note-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .note {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: 16px;
+    }
+
+    .callout {
+      margin-top: 18px;
+      padding: 18px;
+      color: #243028;
+      background: #e9efe8;
+      border: 1px solid #c8d4c7;
+      font-weight: 700;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 860px) {
+      main {
+        width: min(100% - 20px, 1180px);
+        padding-top: 24px;
+      }
+
+      header,
+      .cards,
+      .comparison-grid,
+      .note-grid {
+        grid-template-columns: 1fr;
+      }
+
+      section,
+      .hero-note {
+        padding: 18px;
+      }
+
+      .hero-stats {
+        grid-template-columns: 1fr;
+      }
+
+      .bar-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .bar-value {
+        text-align: left;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Octen embedding benchmark comparison</h1>
+        <p class="lead">
+          Three Octen embedding sizes were tested on 6,993 Dutch and English survey answers.
+          The 8B model wins on quality, the 4B model is very close while running much faster,
+          and the 0.6B model is the speed option with a clear quality drop.
+        </p>
+      </div>
+      <aside class="hero-note">
+        <div>
+          <div class="winner-label">Best quality</div>
+          <div class="winner-model">Octen 8B</div>
+          <p class="winner-text">
+            Highest top-10 score, highest top-200 score, strongest cross-language retrieval,
+            and best topic-query accuracy.
+          </p>
+        </div>
+        <div class="hero-stats">
+          <div class="stat">
+            <strong>0.559</strong>
+            <span>domain score</span>
+          </div>
+          <div class="stat">
+            <strong>0.408</strong>
+            <span>domain score 200</span>
+          </div>
+          <div class="stat">
+            <strong>154.5s</strong>
+            <span>embed time</span>
+          </div>
+        </div>
+      </aside>
+    </header>
+
+    <section>
+      <h2>Plain-English Result</h2>
+      <div class="comparison-grid">
+        <div class="insight">
+          <strong>8B is the quality winner.</strong>
+          It is best on every major quality metric: `domain_score`, `domain_score_200`,
+          `MAP@10`, `MAP@200`, cross-language retrieval, topic-query accuracy,
+          linear probing, and clustering.
+        </div>
+        <div class="insight">
+          <strong>4B is the practical tradeoff.</strong>
+          It keeps about 98% of the 8B top-10 domain score and about 97% of the
+          8B top-200 domain score, while finishing the embedding run about 38% faster.
+        </div>
+        <div class="insight">
+          <strong>0.6B is much faster but weaker.</strong>
+          It runs in 23.77 seconds, but loses a lot of quality, especially on
+          cross-language retrieval and query-to-topic matching.
+        </div>
+        <div class="insight">
+          <strong>For many answers, look at `domain_score_200`.</strong>
+          Since your embedding model will search across a large pool, the `@200`
+          metrics are the better stress test. The ranking remains 8B, then 4B,
+          then 0.6B.
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Model Cards</h2>
+      <p class="section-intro">
+        The cards show the main quality score, the deeper retrieval score, speed,
+        and the most important interpretation.
+      </p>
+      <div class="cards" id="modelCards"></div>
+    </section>
+
+    <section>
+      <h2>Overall Scores</h2>
+      <p class="section-intro">
+        `domain_score` uses `@10` retrieval. `domain_score_200` uses `@200`
+        retrieval. Higher is better for both.
+      </p>
+      <div class="bar-list" id="overallBars"></div>
+    </section>
+
+    <section>
+      <h2>Metric Table</h2>
+      <p class="section-intro">
+        Green values are the best result in that row. The 8B model wins every
+        displayed quality metric; the only metric where lower is better is time.
+      </p>
+      <div class="table-wrap">
+        <table id="metricTable"></table>
+      </div>
+    </section>
+
+    <section>
+      <h2>What The Differences Mean</h2>
+      <div class="note-grid">
+        <div class="note">
+          <h3>Top-10 retrieval</h3>
+          <p>
+            `MAP@10` and `NDCG@10` check whether the first page of retrieved
+            answers is clean. The 8B model is best, but 4B is close:
+            0.614 vs 0.605 on `MAP@10`.
+          </p>
+        </div>
+        <div class="note">
+          <h3>Top-200 retrieval</h3>
+          <p>
+            `MAP@200` is harder because it checks a much deeper list. Scores are
+            lower, but the ranking is stable: 8B at 0.326, 4B at 0.314, 0.6B at
+            0.262.
+          </p>
+        </div>
+        <div class="note">
+          <h3>Speed</h3>
+          <p>
+            8B takes 154.5 seconds, 4B takes 95.39 seconds, and 0.6B takes
+            23.77 seconds. The 4B model is the strongest speed-quality compromise.
+          </p>
+        </div>
+      </div>
+      <div class="callout">
+        Recommendation: use Octen 8B when retrieval quality matters most. Use
+        Octen 4B when you want almost the same ranking behavior with much faster
+        embedding. Use Octen 0.6B only when speed or hardware limits are the main concern.
+      </div>
+    </section>
+
+    <section>
+      <h2>Why `@200` Drops But `MRR` Does Not</h2>
+      <p class="section-intro">
+        `MAP@200` and `NDCG@200` drop because they judge a much larger part of the
+        ranked list. It is harder to keep 200 retrieved answers clean than 10.
+        `MRR@200` stays almost the same as `MRR@10` because MRR only asks where
+        the first correct same-topic answer appears. If the first correct answer
+        is already in the top 10, increasing the cutoff to 200 barely changes MRR.
+      </p>
+      <p class="small">
+        Chance topic accuracy for seven balanced topics is roughly 0.143, so all
+        three models are well above chance. The question is not whether they work,
+        but how much quality you want to pay for in speed and model size.
+      </p>
+    </section>
+  </main>
+
+  <script>
+    const models = [
+      {
+        shortName: "Octen 8B",
+        model: "Octen/Octen-Embedding-8B",
+        role: "Best quality; strongest choice for final retrieval.",
+        color: "#1d7a7a",
+        domain_score: 0.5590228719533801,
+        domain_score_200: 0.4084759665111434,
+        embed_time_s: 154.5,
+        top1_topic_acc: 0.7639067639067639,
+        map_at_10: 0.6143290569481045,
+        map_at_200: 0.325911693994719,
+        ndcg_at_10: 0.7106542849476417,
+        ndcg_at_200: 0.5059963885097942,
+        mrr_at_10: 0.8437651370191052,
+        mrr_at_200: 0.8451005273588652,
+        cross_lang_map_at_10: 0.5713155000956206,
+        cross_lang_map_at_200: 0.25120701731451556,
+        query_acc_mixed: 0.4624624624624625,
+        linear_probe_f1_macro: 0.7591036622627139,
+        kmeans_v_measure: 0.30979889894801904
+      },
+      {
+        shortName: "Octen 4B",
+        model: "Octen/Octen-Embedding-4B",
+        role: "Best tradeoff; near 8B quality with much faster runtime.",
+        color: "#b85733",
+        domain_score: 0.5481882899451141,
+        domain_score_200: 0.39604497907155933,
+        embed_time_s: 95.39,
+        top1_topic_acc: 0.7619047619047619,
+        map_at_10: 0.6054902237838746,
+        map_at_200: 0.31356465905717174,
+        ndcg_at_10: 0.7039867326367988,
+        ndcg_at_200: 0.4957926677866051,
+        mrr_at_10: 0.8419472760742602,
+        mrr_at_200: 0.8432452901647698,
+        cross_lang_map_at_10: 0.5632503995574133,
+        cross_lang_map_at_200: 0.24042219227969355,
+        query_acc_mixed: 0.4395824395824396,
+        linear_probe_f1_macro: 0.7583872146309972,
+        kmeans_v_measure: 0.30237450808209615
+      },
+      {
+        shortName: "Octen 0.6B",
+        model: "Octen/Octen-Embedding-0.6B",
+        role: "Fastest option; useful when speed matters more than accuracy.",
+        color: "#c79b36",
+        domain_score: 0.492487719558572,
+        domain_score_200: 0.350244667497853,
+        embed_time_s: 23.77,
+        top1_topic_acc: 0.7328757328757328,
+        map_at_10: 0.5469459765888337,
+        map_at_200: 0.26196323120422393,
+        ndcg_at_10: 0.6579844460533506,
+        ndcg_at_200: 0.44989832112802525,
+        mrr_at_10: 0.8191338731021272,
+        mrr_at_200: 0.8209605074960478,
+        cross_lang_map_at_10: 0.4868757399211358,
+        cross_lang_map_at_200: 0.20313459769445533,
+        query_acc_mixed: 0.3868153868153868,
+        linear_probe_f1_macro: 0.7247551021390104,
+        kmeans_v_measure: 0.2561166657299647
+      }
+    ];
+
+    const metrics = [
+      ["Domain score", "domain_score", "higher"],
+      ["Domain score 200", "domain_score_200", "higher"],
+      ["Top-1 topic accuracy", "top1_topic_acc", "higher"],
+      ["MAP@10", "map_at_10", "higher"],
+      ["MAP@200", "map_at_200", "higher"],
+      ["NDCG@10", "ndcg_at_10", "higher"],
+      ["NDCG@200", "ndcg_at_200", "higher"],
+      ["MRR@10", "mrr_at_10", "higher"],
+      ["MRR@200", "mrr_at_200", "higher"],
+      ["Cross-language MAP@10", "cross_lang_map_at_10", "higher"],
+      ["Cross-language MAP@200", "cross_lang_map_at_200", "higher"],
+      ["Topic query accuracy", "query_acc_mixed", "higher"],
+      ["Linear probe F1", "linear_probe_f1_macro", "higher"],
+      ["K-Means V-measure", "kmeans_v_measure", "higher"],
+      ["Embed time seconds", "embed_time_s", "lower"]
+    ];
+
+    const pct = value => `${(value * 100).toFixed(1)}%`;
+    const score = value => value.toFixed(3);
+
+    function bestFor(metric, direction) {
+      const values = models.map(model => model[metric]);
+      return direction === "lower" ? Math.min(...values) : Math.max(...values);
+    }
+
+    function renderCards() {
+      const wrap = document.querySelector("#modelCards");
+      wrap.innerHTML = models.map((model, index) => `
+        <article class="model-card ${index === 0 ? "best" : ""}">
+          <div class="model-name">${model.shortName}</div>
+          <p class="model-role">${model.role}</p>
+          <div class="score-row"><span>Domain score</span><strong>${score(model.domain_score)}</strong></div>
+          <div class="score-row"><span>Domain score 200</span><strong>${score(model.domain_score_200)}</strong></div>
+          <div class="score-row"><span>MAP@10</span><strong>${score(model.map_at_10)}</strong></div>
+          <div class="score-row"><span>MAP@200</span><strong>${score(model.map_at_200)}</strong></div>
+          <div class="score-row"><span>Embed time</span><strong>${model.embed_time_s.toFixed(2)}s</strong></div>
+        </article>
+      `).join("");
+    }
+
+    function renderOverallBars() {
+      const wrap = document.querySelector("#overallBars");
+      const rows = [
+        ["Domain score", "domain_score"],
+        ["Domain score 200", "domain_score_200"],
+        ["MAP@10", "map_at_10"],
+        ["MAP@200", "map_at_200"],
+        ["Cross-lang MAP@200", "cross_lang_map_at_200"]
+      ];
+
+      wrap.innerHTML = rows.map(([label, key]) => {
+        const max = Math.max(...models.map(model => model[key]));
+        const group = models.map(model => `
+          <div class="bar-row">
+            <div class="bar-label">${model.shortName}</div>
+            <div class="track">
+              <div class="fill" style="--w: ${(model[key] / max * 100).toFixed(1)}%; --c: ${model.color};"></div>
+            </div>
+            <div class="bar-value">${score(model[key])}</div>
+          </div>
+        `).join("");
+        return `<div><h3>${label}</h3><div class="bar-list">${group}</div></div>`;
+      }).join("");
+    }
+
+    function renderTable() {
+      const table = document.querySelector("#metricTable");
+      const header = `
+        <thead>
+          <tr>
+            <th>Metric</th>
+            ${models.map(model => `<th>${model.shortName}</th>`).join("")}
+          </tr>
+        </thead>
+      `;
+
+      const body = metrics.map(([label, key, direction]) => {
+        const best = bestFor(key, direction);
+        const cells = models.map(model => {
+          const isBest = Math.abs(model[key] - best) < 0.0000001;
+          const value = key === "embed_time_s" ? `${model[key].toFixed(2)}s` : score(model[key]);
+          return `<td class="${isBest ? "best-cell" : ""}">${value}</td>`;
+        }).join("");
+        return `<tr><td>${label}</td>${cells}</tr>`;
+      }).join("");
+
+      table.innerHTML = `${header}<tbody>${body}</tbody>`;
+    }
+
+    renderCards();
+    renderOverallBars();
+    renderTable();
+  </script>
+</body>
+</html>

@@ -142,12 +142,19 @@ It looks at the top 10 retrieved answers and rewards the model when:
 This is one of the most important metrics because survey analysis often depends
 on retrieving several similar answers, not just one nearest neighbor.
 
+The benchmark now also reports `map_at_200`. This keeps the strict top-10 view
+while adding a deeper score for cases where the embedding model retrieves from a
+large pool of survey answers.
+
 ### `ndcg_at_10`
 
 `NDCG@10` means Normalized Discounted Cumulative Gain at 10.
 
 It also evaluates the top 10 results, but it gives more weight to relevant
 answers near the top of the list. It is useful when ranking quality matters.
+
+The matching `ndcg_at_200` metric checks whether same-topic answers remain
+highly ranked when looking much deeper into the retrieved list.
 
 ### `mrr_at_10`
 
@@ -159,6 +166,10 @@ result is at rank 2, it is 0.5.
 
 This metric is useful, but it is less complete than `MAP@10` because it only
 cares about the first relevant result.
+
+The matching `mrr_at_200` metric is included for completeness. In practice it
+often stays close to `mrr_at_10`, because it only cares where the first relevant
+answer appears.
 
 ## Cross-Language Retrieval
 
@@ -184,6 +195,11 @@ The benchmark reports:
 | `cross_lang_en_to_nl_*` | English query answers retrieving Dutch answers |
 | `mixed_pool_nl_query_*` | Dutch query answers retrieving from the full mixed-language pool |
 | `mixed_pool_en_query_*` | English query answers retrieving from the full mixed-language pool |
+
+For these retrieval groups, the script reports both `@10` and `@200` versions
+of `MAP`, `NDCG`, and `MRR`. The `@10` numbers show whether the very top results
+are clean; the `@200` numbers show whether the model still behaves well when
+many answers are retrieved.
 
 These metrics are important because a model may perform well in one language but
 fail to align Dutch and English answers in the same semantic space.
@@ -296,7 +312,8 @@ The benchmark creates one final weighted score called:
 domain_score
 ```
 
-The formula is:
+This remains the top-10 score so new runs are comparable with older benchmark
+logs. The formula is:
 
 ```text
 domain_score =
@@ -316,6 +333,11 @@ The weights are:
 | `cross_lang_map_at_10` | 0.20 | Dutch-English semantic alignment |
 | `linear_probe_f1_macro` | 0.15 | Topic information available in frozen embeddings |
 | `kmeans_v_measure` | 0.10 | Whether unsupervised clusters roughly match topics |
+
+The script also creates `domain_score_200`, using the same weights but replacing
+`map_at_10` with `map_at_200` and `cross_lang_map_at_10` with
+`cross_lang_map_at_200`. This is the deeper retrieval score to inspect when the
+embedding model will search across a large answer pool.
 
 This scoring system is reasonable because most of the weight goes to retrieval
 and topic-query behavior, which are closest to the intended use case. Clustering
