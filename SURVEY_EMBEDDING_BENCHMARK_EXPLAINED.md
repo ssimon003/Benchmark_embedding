@@ -463,56 +463,6 @@ real future survey responses.
 
 This is another reason to prefer retrieval metrics and real-sample validation.
 
-## Mistakes Or Issues Found
-
-I noticed several issues worth fixing or mentioning.
-
-### 1. Current Default Model List Is Narrow
-
-In `survey_embedding_benchmark.py`, the current `DEFAULT_MODELS` list contains
-only:
-
-```text
-jinaai/jina-embeddings-v5-text-small
-```
-
-The previous comparison models are commented out. This is not wrong, but it
-means that running the script without `--models` now benchmarks only Jina.
-
-This means:
-
-```text
-For a fair model-selection run, pass all candidate models explicitly with
---models, or put all candidate models back into DEFAULT_MODELS.
-```
-
-### 2. The README Mentions 70/30 Metrics That The Current Script Does Not Compute
-
-The README mentions metrics such as:
-
-```text
-cross_lang_map_at_10_70_30
-mixed_pool_map_at_10_70_30
-dutch_heavy_cross_language_score
-```
-
-Some older log rows contain these fields, but the current
-`survey_embedding_benchmark.py` does not compute them anymore.
-
-If the expected real-world usage is 70% Dutch and 30% English, either the script
-should add these metrics back, or the README should be updated.
-
-### 3. `topk_indices` Is Defined But Not Used
-
-The helper function `topk_indices` is present in the script but not used. This
-is harmless, but it can be removed to keep the benchmark script cleaner.
-
-### 4. Optional MTEB In This Script Does Not Produce A Summary
-
-The `--run-mteb` option runs MTEB tasks, but it does not summarize the MTEB
-results into a simple ranking. The separate `mteb_dutch_english_benchmark.py`
-script is better for this because it writes a focused summary.
-
 ## Recommended Final Validation Strategy
 
 For a report or thesis, the strongest argument is:
